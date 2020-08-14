@@ -11,7 +11,7 @@ class WSPayAppConf(AppConf):
     BASE_URL = None,
     DEVELOPMENT = None
     PAYMENT_ENDPOINT = None
-    VERSION = '2,0',
+    VERSION = '2.0'
 
     class Meta:
         prefix = 'ws_pay'

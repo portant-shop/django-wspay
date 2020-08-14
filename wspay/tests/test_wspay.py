@@ -3,6 +3,7 @@ import responses
 import requests
 
 from django.urls import reverse
+from django.test.client import RequestFactory
 
 from wspay.forms import UnprocessedPaymentForm, WSPaySignedForm
 from wspay.services import process_data, generate_signature
@@ -31,14 +32,20 @@ def test_wspay_encode():
         'Version': settings.WS_PAY_VERSION,
         'TotalAmount': '10,00',
         'Signature': signature,
-        'ReturnURL': reverse('process-response', kwargs={'status': 'success'}),
-        'CancelURL': reverse('process-response', kwargs={'status': 'cancel'}),
-        'ReturnErrorURL': reverse('process-response', kwargs={'status': 'error'}),
+        'ReturnURL': (
+            'http://testserver' + reverse('wspay:process-response', kwargs={'status': 'success'})
+        ),
+        'CancelURL': (
+            'http://testserver' + reverse('wspay:process-response', kwargs={'status': 'cancel'})
+        ),
+        'ReturnErrorURL': (
+            'http://testserver' + reverse('wspay:process-response', kwargs={'status': 'error'})
+        ),
     }
 
     incoming_form = UnprocessedPaymentForm({'user_id': 1, 'cart_id': 1, 'price': 10})
     if (incoming_form.is_valid()):
-        form_data = process_data(incoming_form.cleaned_data)
+        form_data = process_data(incoming_form.cleaned_data, RequestFactory().get('/'))
 
     assert return_data == form_data
 
@@ -51,7 +58,7 @@ def test_wspay_form():
 
     incoming_form = UnprocessedPaymentForm({'user_id': 1, 'cart_id': 1, 'price': 1})
     if (incoming_form.is_valid()):
-        form_data = process_data(incoming_form.cleaned_data)
+        form_data = process_data(incoming_form.cleaned_data, RequestFactory().get('/'))
 
     form = WSPaySignedForm(form_data)
     assert form.is_valid()

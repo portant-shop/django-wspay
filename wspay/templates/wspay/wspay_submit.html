@@ -13,7 +13,7 @@
 <div class="grid-container">
   <div class="grid-x">
     <div class="small-12 cell">
-      <form id="wspay-form" action="{{ post_url }}" enctype="multipart/form-data" method="post">
+      <form id="wspay-form" action="{{ submit_url }}" enctype="multipart/form-data" method="post">
         {% csrf_token %}
         {{ form }}
       </form>

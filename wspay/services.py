@@ -9,14 +9,15 @@ EXP = Decimal('.01')
 setcontext(BasicContext)
 
 
-def process_data(incoming_data):
+def process_data(incoming_data, request):
     """Process incoming data and prepare for POST to WSPay."""
     price = incoming_data['price']
     assert price > 0, 'Price must be greater than 0'
     total_for_sign, total = build_price(price)
 
-    param_list = [settings.WS_PAY_SHOP_ID, incoming_data['cart_id'], total_for_sign]
-    signature = generate_signature(param_list)
+    signature = generate_signature(
+        [settings.WS_PAY_SHOP_ID, incoming_data['cart_id'], total_for_sign]
+    )
 
     return_data = {
         'ShopID': settings.WS_PAY_SHOP_ID,
@@ -24,9 +25,15 @@ def process_data(incoming_data):
         'Version': settings.WS_PAY_VERSION,
         'TotalAmount': total,
         'Signature': signature,
-        'ReturnURL': reverse('process-response', kwargs={'status': 'success'}),
-        'CancelURL': reverse('process-response', kwargs={'status': 'cancel'}),
-        'ReturnErrorURL': reverse('process-response', kwargs={'status': 'error'}),
+        'ReturnURL': request.build_absolute_uri(
+            reverse('wspay:process-response', kwargs={'status': 'success'})
+        ),
+        'CancelURL': request.build_absolute_uri(
+            reverse('wspay:process-response', kwargs={'status': 'cancel'})
+        ),
+        'ReturnErrorURL': request.build_absolute_uri(
+            reverse('wspay:process-response', kwargs={'status': 'error'})
+        ),
     }
 
     return return_data
@@ -34,17 +41,16 @@ def process_data(incoming_data):
 
 def generate_signature(param_list):
     """Compute the signature."""
-    s = ''
-    for item in param_list:
-        s += item
-        s += settings.SECRET_KEY
-    return compute_hash(s)
+    result = []
+    for x in param_list:
+        result.append(x)
+        result.append(settings.WS_PAY_SECRET_KEY)
+    return compute_hash(''.join(result))
 
 
-def compute_hash(string_for_hashing):
+def compute_hash(signature):
     """Compute the hash out of the given values."""
-    m = hashlib.md5(string_for_hashing.encode())
-    return m.hexdigest()
+    return hashlib.sha512(signature.encode()).hexdigest()
 
 
 def build_price(price):

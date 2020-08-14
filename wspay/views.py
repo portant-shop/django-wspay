@@ -11,13 +11,16 @@ from wspay.conf import settings
 class ProcessView(FormView):
     """Receive payment data and prepare it for WSPay."""
 
+    form_class = UnprocessedPaymentForm
+    template_name = 'wspay/error.html'
+
     def form_valid(self, form):
-        form_data = process_data(form.cleaned_data)
+        form_data = process_data(form.cleaned_data, self.request)
         wspay_form = WSPaySignedForm(form_data)
         return render(
             self.request,
-            'wspay/wspaypost.html',
-            {'form': wspay_form, 'url': settings.PAYMENT_ENDPOINT}
+            'wspay/wspay_submit.html',
+            {'form': wspay_form, 'submit_url': settings.WS_PAY_PAYMENT_ENDPOINT}
         )
 
 
@@ -34,15 +37,12 @@ class ProcessResponseView(View):
         status = kwargs['status']
         assert status in [PaymentStatus.SUCCESS, PaymentStatus.ERROR, PaymentStatus.CANCEL]
         if(status == PaymentStatus.SUCCESS):
-            try:
-                data = {
-                    'ShoppingCartID': int(request.GET.get('ShoppingCartID')),
-                    'Success': int(request.GET.get('Success')),
-                    'ApprovalCode': request.GET.get('ApprovalCode'),
-                    'Signature': request.GET.get('Signature'),
-                }
-            except Exception:
-                return redirect('wspay:failed')
+            data = {
+                'ShoppingCartID': int(request.GET.get('ShoppingCartID')),
+                'Success': int(request.GET.get('Success')),
+                'ApprovalCode': request.GET.get('ApprovalCode'),
+                'Signature': request.GET.get('Signature'),
+            }
 
             param_list = [
                 settings.SHOP_ID,
@@ -65,10 +65,3 @@ class TestView(FormView):
 
     template_name = 'wspay/test.html'
     form_class = UnprocessedPaymentForm
-
-
-class FailedView(View):
-    """Handle failed transactions."""
-
-    def get(self, request, *args, **kwargs):
-        return HttpResponse('Transaction failed!')

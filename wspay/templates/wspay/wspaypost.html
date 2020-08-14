@@ -1,0 +1,23 @@
+{% extends "ui/base.html" %}
+
+{% load static %}
+{% load i18n %}
+
+{% block javascript %}
+<script type="text/javascript">
+  document.getElementById("wspay-form").submit()
+</script>
+{% endblock javascript %}
+
+{% block content %}
+<div class="grid-container">
+  <div class="grid-x">
+    <div class="small-12 cell">
+      <form id="wspay-form" action="{{ post_url }}" enctype="multipart/form-data" method="post">
+        {% csrf_token %}
+        {{ form }}
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock content %}

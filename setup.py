@@ -1,0 +1,59 @@
+from setuptools import find_packages, setup
+
+
+NAME = "django-wspay"
+DESCRIPTION = "a payments Django app for WSPay"
+AUTHOR = "Vedran Vojvoda"
+AUTHOR_EMAIL = "vedran@pinkdroids.com"
+URL = "https://github.com/pinkdroids/django-wspay"
+LONG_DESCRIPTION = """
+============
+Django WSPay
+============
+"""
+
+tests_require = [
+    "mock",
+    "pytest",
+    "pytest-django",
+]
+
+setup(
+    name=NAME,
+    author=AUTHOR,
+    author_email=AUTHOR_EMAIL,
+    description=DESCRIPTION,
+    long_description=LONG_DESCRIPTION,
+    version="0.1.0",
+    license="MIT",
+    url=URL,
+    packages=find_packages(),
+    package_data={
+        "pinax.stripe": [
+            "templates/pinax/stripe/email/body_base.txt",
+            "templates/pinax/stripe/email/body.txt",
+            "templates/pinax/stripe/email/subject.txt"
+        ]
+    },
+    classifiers=[
+        "Development Status :: 2 - Pre-Alpha",
+        "Environment :: Web Environment",
+        "Intended Audience :: Developers",
+        "License :: OSI Approved :: BSD License",
+        "Operating System :: OS Independent",
+        "Programming Language :: Python",
+        "Programming Language :: Python :: 3",
+        "Framework :: Django",
+    ],
+    install_requires=[
+        "django-appconf>=1.0.4",
+        "django>=3.0",
+        "pytz",
+        "responses>=0.10.16",
+        "six",
+    ],
+    extras_require={
+        "testing": tests_require,
+    },
+    zip_safe=False,
+)

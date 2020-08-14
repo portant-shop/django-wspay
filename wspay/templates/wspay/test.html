@@ -1,0 +1,19 @@
+{% extends "ui/base.html" %}
+
+{% load static %}
+{% load i18n %}
+
+{% block content %}
+<div class="grid-container">
+  <div class="grid-x">
+    <div class="small-12 cell">
+      <!-- in action: url to process view -->
+      <form action="{% url 'wspay:process' %}" enctype="multipart/form-data" method="post">
+        {% csrf_token %}
+        {{ form.as_p }}
+        <button class="button">Pay</button>
+      </form>
+    </div>
+  </div>
+</div>
+{% endblock content %}

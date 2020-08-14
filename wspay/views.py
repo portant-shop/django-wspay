@@ -1,9 +1,14 @@
-from django.views.generic import FormView, View
-from django.http import HttpResponse
+import json
+
 from django.shortcuts import render, redirect
+from django.views.decorators.csrf import csrf_exempt
+from django.views.generic import FormView, View
 
-
-from wspay.forms import UnprocessedPaymentForm, WSPaySignedForm
+from wspay.forms import (
+    UnprocessedPaymentForm, WSPaySignedForm, WSPayErrorResponseForm, WSPaySuccessResponseForm,
+    WSPayCancelResponseForm,
+)
+from wspay.models import WSPayRequest, WSPayRequestStatus
 from wspay.services import process_data, generate_signature
 from wspay.conf import settings
 
@@ -15,7 +20,13 @@ class ProcessView(FormView):
     template_name = 'wspay/error.html'
 
     def form_valid(self, form):
-        form_data = process_data(form.cleaned_data, self.request)
+        wspay_request = WSPayRequest.objects.create(
+            cart_id=form.cleaned_data['cart_id'],
+        )
+        input_data = form.cleaned_data.copy()
+        input_data['cart_id'] = str(wspay_request.request_uuid)
+
+        form_data = process_data(input_data, self.request)
         wspay_form = WSPaySignedForm(form_data)
         return render(
             self.request,
@@ -33,31 +44,55 @@ class PaymentStatus:
 class ProcessResponseView(View):
     """Handle success, error and cancel."""
 
+    @csrf_exempt
     def dispatch(self, request, *args, **kwargs):
         status = kwargs['status']
         assert status in [PaymentStatus.SUCCESS, PaymentStatus.ERROR, PaymentStatus.CANCEL]
-        if(status == PaymentStatus.SUCCESS):
-            data = {
-                'ShoppingCartID': int(request.GET.get('ShoppingCartID')),
-                'Success': int(request.GET.get('Success')),
-                'ApprovalCode': request.GET.get('ApprovalCode'),
-                'Signature': request.GET.get('Signature'),
-            }
 
+        data = request.POST if request.method == 'POST' else request.GET
+        if(status == PaymentStatus.SUCCESS):
+            cleaned_data = self._verify_response(WSPaySuccessResponseForm, data)
+            request_status = WSPayRequestStatus.COMPLETED
+            redirect_url = settings.WS_PAY_SUCCESS_URL
+            if cleaned_data['Success'] != 1 or cleaned_data['ApprovalCode'] == '':
+                raise Exception('Expecting success to be 1 and approval code to not be blank.')
+        elif(status == PaymentStatus.CANCEL):
+            cleaned_data = self._verify_response(WSPayCancelResponseForm, data)
+            request_status = WSPayRequestStatus.CANCELLED
+            redirect_url = settings.WS_PAY_CANCEL_URL
+        else:
+            cleaned_data = self._verify_response(WSPayErrorResponseForm, data)
+            request_status = WSPayRequestStatus.FAILED
+            redirect_url = settings.WS_PAY_ERROR_URL
+            if cleaned_data['Success'] != 0:
+                raise Exception('Expecting Success to be 0.')
+
+        wspay_request = WSPayRequest.objects.get(
+            request_uuid=cleaned_data['ShoppingCartID'],
+        )
+        wspay_request.status = request_status.name
+        wspay_request.response = json.dumps(cleaned_data)
+        wspay_request.save()
+
+        return redirect(redirect_url)
+
+    def _verify_response(self, form_class, data):
+        form = form_class(data=data)
+        if form.is_valid():
+            signature = form.cleaned_data['Signature']
             param_list = [
-                settings.SHOP_ID,
+                settings.WS_PAY_SHOP_ID,
                 data['ShoppingCartID'],
                 data['Success'],
                 data['ApprovalCode']
             ]
-            sig = generate_signature(param_list)
-            if(data['Success'] != 1 or data['ApprovalCode'] == '' or data['Signature'] != sig):
-                return redirect('wspay:failed')
+            expected_signature = generate_signature(param_list)
+            if signature != expected_signature:
+                raise Exception('Bad signature')
 
-        elif(status == PaymentStatus.CANCEL):
-            return HttpResponse('Transaction was canceled!')
-        else:
-            return HttpResponse('An error occurred!')
+            return form.cleaned_data
+
+        raise Exception('Form is not valid')
 
 
 class TestView(FormView):

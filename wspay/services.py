@@ -9,7 +9,7 @@ EXP = Decimal('.01')
 setcontext(BasicContext)
 
 
-def process_data(incoming_data, request):
+def process_data(incoming_data, request, user=None):
     """Process incoming data and prepare for POST to WSPay."""
     price = incoming_data['price']
     assert price > 0, 'Price must be greater than 0'
@@ -34,7 +34,24 @@ def process_data(incoming_data, request):
         'ReturnErrorURL': request.build_absolute_uri(
             reverse('wspay:process-response', kwargs={'status': 'error'})
         ),
+        'ReturnMethod': 'POST',
     }
+    if incoming_data.get('first_name'):
+        return_data['CustomerFirstName'] = incoming_data['first_name']
+    if incoming_data.get('last_name'):
+        return_data['CustomerLastName'] = incoming_data['last_name']
+    if incoming_data.get('address'):
+        return_data['CustomerAddress'] = incoming_data['address']
+    if incoming_data.get('city'):
+        return_data['CustomerCity'] = incoming_data['city']
+    if incoming_data.get('zip_code'):
+        return_data['CustomerZIP'] = incoming_data['zip_code']
+    if incoming_data.get('country'):
+        return_data['CustomerCountry'] = incoming_data['country']
+    if incoming_data.get('email'):
+        return_data['CustomerEmail'] = incoming_data['email']
+    if incoming_data.get('phone'):
+        return_data['CustomerPhone'] = incoming_data['phone']
 
     return return_data
 

@@ -4,13 +4,14 @@ from django.shortcuts import render, redirect
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import FormView, View
 
+from wspay.conf import settings
 from wspay.forms import (
     UnprocessedPaymentForm, WSPaySignedForm, WSPayErrorResponseForm, WSPaySuccessResponseForm,
     WSPayCancelResponseForm,
 )
 from wspay.models import WSPayRequest, WSPayRequestStatus
 from wspay.services import process_data, generate_signature
-from wspay.conf import settings
+from wspay.signals import pay_request_created, pay_request_updated
 
 
 class ProcessView(FormView):
@@ -23,6 +24,7 @@ class ProcessView(FormView):
         wspay_request = WSPayRequest.objects.create(
             cart_id=form.cleaned_data['cart_id'],
         )
+        pay_request_created.send_robust(WSPayRequest.__class__, instance=wspay_request)
         input_data = form.cleaned_data.copy()
         input_data['cart_id'] = str(wspay_request.request_uuid)
 
@@ -73,6 +75,13 @@ class ProcessResponseView(View):
         wspay_request.status = request_status.name
         wspay_request.response = json.dumps(cleaned_data)
         wspay_request.save()
+
+        # Send a signal
+        pay_request_updated.send_robust(
+            WSPayRequest.__class__,
+            instance=wspay_request,
+            status=request_status
+        )
 
         return redirect(redirect_url)
 

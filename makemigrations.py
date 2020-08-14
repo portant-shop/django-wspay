@@ -35,6 +35,7 @@ DEFAULT_SETTINGS = dict(
 
 
 def run(*args):
+    """Do django setup and run makemigrations mgmt command."""
     if not settings.configured:
         settings.configure(**DEFAULT_SETTINGS)
 

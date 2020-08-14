@@ -1,4 +1,5 @@
 from django import forms
+from django.core.exceptions import ValidationError
 
 
 class UnprocessedPaymentForm(forms.Form):
@@ -72,10 +73,24 @@ class WSPaySuccessResponseForm(WSPaySuccessErrorResponseForm):
     ApprovalCode = forms.CharField()
     ErrorMessage = forms.CharField(required=False)
 
+    def clean(self):
+        cleaned_data = super().clean()
+
+        if cleaned_data['Success'] != 1 or cleaned_data['ApprovalCode'] == '':
+            raise ValidationError(
+                'Expecting success to be 1 and approval code to not be blank.'
+            )
+
 
 class WSPayErrorResponseForm(WSPaySuccessErrorResponseForm):
     ErrorMessage = forms.CharField()
     ErrorCodes = forms.CharField()
+
+    def clean(self):
+        cleaned_data = super().clean()
+
+        if cleaned_data['Success'] != 0:
+            raise ValidationError('Expecting Success to be 0.')
 
 
 class WSPayCancelResponseForm(WSPayBaseResponseForm):

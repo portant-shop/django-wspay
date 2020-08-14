@@ -48,41 +48,10 @@ class ProcessResponseView(View):
 
     @csrf_exempt
     def dispatch(self, request, *args, **kwargs):
-        status = kwargs['status']
-        assert status in [PaymentStatus.SUCCESS, PaymentStatus.ERROR, PaymentStatus.CANCEL]
-
+        form_class, request_status, redirect_url = self._unpack_response_status(kwargs['status'])
         data = request.POST if request.method == 'POST' else request.GET
-        if(status == PaymentStatus.SUCCESS):
-            cleaned_data = self._verify_response(WSPaySuccessResponseForm, data)
-            request_status = WSPayRequestStatus.COMPLETED
-            redirect_url = settings.WS_PAY_SUCCESS_URL
-            if cleaned_data['Success'] != 1 or cleaned_data['ApprovalCode'] == '':
-                raise Exception('Expecting success to be 1 and approval code to not be blank.')
-        elif(status == PaymentStatus.CANCEL):
-            cleaned_data = self._verify_response(WSPayCancelResponseForm, data)
-            request_status = WSPayRequestStatus.CANCELLED
-            redirect_url = settings.WS_PAY_CANCEL_URL
-        else:
-            cleaned_data = self._verify_response(WSPayErrorResponseForm, data)
-            request_status = WSPayRequestStatus.FAILED
-            redirect_url = settings.WS_PAY_ERROR_URL
-            if cleaned_data['Success'] != 0:
-                raise Exception('Expecting Success to be 0.')
-
-        wspay_request = WSPayRequest.objects.get(
-            request_uuid=cleaned_data['ShoppingCartID'],
-        )
-        wspay_request.status = request_status.name
-        wspay_request.response = json.dumps(cleaned_data)
-        wspay_request.save()
-
-        # Send a signal
-        pay_request_updated.send_robust(
-            WSPayRequest.__class__,
-            instance=wspay_request,
-            status=request_status
-        )
-
+        cleaned_data = self._verify_response(form_class, data)
+        self._update_payment_request(cleaned_data, request_status)
         return redirect(redirect_url)
 
     def _verify_response(self, form_class, data):
@@ -102,6 +71,38 @@ class ProcessResponseView(View):
             return form.cleaned_data
 
         raise Exception('Form is not valid')
+
+    def _unpack_response_status(self, status):
+        assert status in [PaymentStatus.SUCCESS, PaymentStatus.ERROR, PaymentStatus.CANCEL]
+        if status == PaymentStatus.SUCCESS:
+            form_class = WSPaySuccessResponseForm
+            request_status = WSPayRequestStatus.COMPLETED
+            redirect_url = settings.WS_PAY_SUCCESS_URL
+        elif status == PaymentStatus.CANCEL:
+            form_class = WSPayCancelResponseForm
+            request_status = WSPayRequestStatus.CANCELLED
+            redirect_url = settings.WS_PAY_CANCEL_URL
+        else:
+            form_class = WSPayErrorResponseForm
+            request_status = WSPayRequestStatus.FAILED
+            redirect_url = settings.WS_PAY_ERROR_URL
+
+        return form_class, request_status, redirect_url
+
+    def _update_payment_request(self, response_data, request_status):
+        wspay_request = WSPayRequest.objects.get(
+            request_uuid=response_data['ShoppingCartID'],
+        )
+        wspay_request.status = request_status.name
+        wspay_request.response = json.dumps(response_data)
+        wspay_request.save()
+
+        # Send a signal
+        pay_request_updated.send_robust(
+            WSPayRequest.__class__,
+            instance=wspay_request,
+            status=request_status
+        )
 
 
 class TestView(FormView):

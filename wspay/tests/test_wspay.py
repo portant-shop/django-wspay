@@ -6,7 +6,8 @@ from django.urls import reverse
 from django.test.client import RequestFactory
 
 from wspay.forms import UnprocessedPaymentForm, WSPaySignedForm
-from wspay.services import process_data, generate_signature
+from wspay.models import WSPayRequest
+from wspay.services import process_input_data, generate_signature
 
 from django.conf import settings
 
@@ -25,13 +26,10 @@ def test_wspay_encode():
     assert settings.WS_PAY_SHOP_ID == 'ljekarnaplus'
     assert settings.WS_PAY_SECRET_KEY == '123456'
 
-    signature = generate_signature([settings.WS_PAY_SHOP_ID, '1', '1000'])
     return_data = {
         'ShopID': settings.WS_PAY_SHOP_ID,
-        'ShoppingCartID': '1',
         'Version': settings.WS_PAY_VERSION,
         'TotalAmount': '10,00',
-        'Signature': signature,
         'ReturnURL': (
             'http://testserver' + reverse('wspay:process-response', kwargs={'status': 'success'})
         ),
@@ -41,11 +39,20 @@ def test_wspay_encode():
         'ReturnErrorURL': (
             'http://testserver' + reverse('wspay:process-response', kwargs={'status': 'error'})
         ),
+        'ReturnMethod': 'POST',
     }
 
-    incoming_form = UnprocessedPaymentForm({'user_id': 1, 'cart_id': 1, 'price': 10})
+    incoming_form = UnprocessedPaymentForm({'cart_id': 1, 'price': 10})
     if (incoming_form.is_valid()):
-        form_data = process_data(incoming_form.cleaned_data, RequestFactory().get('/'))
+        form_data = process_input_data(
+            incoming_form.cleaned_data.copy(), RequestFactory().get('/')
+        )
+
+    req = WSPayRequest.objects.get()
+    return_data['ShoppingCartID'] = str(req.request_uuid)
+    return_data['Signature'] = generate_signature(
+        [settings.WS_PAY_SHOP_ID, str(req.request_uuid), '1000']
+    )
 
     assert return_data == form_data
 
@@ -58,7 +65,10 @@ def test_wspay_form():
 
     incoming_form = UnprocessedPaymentForm({'user_id': 1, 'cart_id': 1, 'price': 1})
     if (incoming_form.is_valid()):
-        form_data = process_data(incoming_form.cleaned_data, RequestFactory().get('/'))
+        form_data = process_input_data(
+            incoming_form.cleaned_data.copy(),
+            RequestFactory().get('/')
+        )
 
     form = WSPaySignedForm(form_data)
     assert form.is_valid()

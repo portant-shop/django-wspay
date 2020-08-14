@@ -38,6 +38,7 @@ setup(
         "Programming Language :: Python :: 3",
         "Framework :: Django",
     ],
+    include_package_data=True,
     install_requires=[
         "django-appconf>=1.0.4",
         "django>=3.0",

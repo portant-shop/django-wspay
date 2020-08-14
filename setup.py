@@ -28,13 +28,6 @@ setup(
     license="MIT",
     url=URL,
     packages=find_packages(),
-    package_data={
-        "pinax.stripe": [
-            "templates/pinax/stripe/email/body_base.txt",
-            "templates/pinax/stripe/email/body.txt",
-            "templates/pinax/stripe/email/subject.txt"
-        ]
-    },
     classifiers=[
         "Development Status :: 2 - Pre-Alpha",
         "Environment :: Web Environment",

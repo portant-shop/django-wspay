@@ -10,6 +10,8 @@ LONG_DESCRIPTION = """
 ============
 Django WSPay
 ============
+
+This django app provides simple support for payments using the wspay gateway.
 """
 
 tests_require = [
@@ -24,7 +26,8 @@ setup(
     author_email=AUTHOR_EMAIL,
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
-    version="0.1.1",
+    long_description_content_type='text/x-rst',
+    version="0.1.2",
     license="MIT",
     url=URL,
     packages=find_packages(),

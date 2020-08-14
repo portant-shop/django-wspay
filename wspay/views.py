@@ -1,5 +1,3 @@
-import json
-
 from django.shortcuts import render, redirect
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import FormView, View
@@ -9,9 +7,8 @@ from wspay.forms import (
     UnprocessedPaymentForm, WSPaySignedForm, WSPayErrorResponseForm, WSPaySuccessResponseForm,
     WSPayCancelResponseForm,
 )
-from wspay.models import WSPayRequest, WSPayRequestStatus
-from wspay.services import process_data, generate_signature
-from wspay.signals import pay_request_created, pay_request_updated
+from wspay.models import WSPayRequestStatus
+from wspay.services import process_input_data, process_response_data, verify_response
 
 
 class ProcessView(FormView):
@@ -21,15 +18,9 @@ class ProcessView(FormView):
     template_name = 'wspay/error.html'
 
     def form_valid(self, form):
-        wspay_request = WSPayRequest.objects.create(
-            cart_id=form.cleaned_data['cart_id'],
+        wspay_form = WSPaySignedForm(
+            process_input_data(form.cleaned_data.copy(), self.request)
         )
-        pay_request_created.send_robust(WSPayRequest.__class__, instance=wspay_request)
-        input_data = form.cleaned_data.copy()
-        input_data['cart_id'] = str(wspay_request.request_uuid)
-
-        form_data = process_data(input_data, self.request)
-        wspay_form = WSPaySignedForm(form_data)
         return render(
             self.request,
             'wspay/wspay_submit.html',
@@ -49,28 +40,14 @@ class ProcessResponseView(View):
     @csrf_exempt
     def dispatch(self, request, *args, **kwargs):
         form_class, request_status, redirect_url = self._unpack_response_status(kwargs['status'])
+
         data = request.POST if request.method == 'POST' else request.GET
-        cleaned_data = self._verify_response(form_class, data)
-        self._update_payment_request(cleaned_data, request_status)
+        process_response_data(
+            verify_response(form_class, data),
+            request_status
+        )
+
         return redirect(redirect_url)
-
-    def _verify_response(self, form_class, data):
-        form = form_class(data=data)
-        if form.is_valid():
-            signature = form.cleaned_data['Signature']
-            param_list = [
-                settings.WS_PAY_SHOP_ID,
-                data['ShoppingCartID'],
-                data['Success'],
-                data['ApprovalCode']
-            ]
-            expected_signature = generate_signature(param_list)
-            if signature != expected_signature:
-                raise Exception('Bad signature')
-
-            return form.cleaned_data
-
-        raise Exception('Form is not valid')
 
     def _unpack_response_status(self, status):
         assert status in [PaymentStatus.SUCCESS, PaymentStatus.ERROR, PaymentStatus.CANCEL]
@@ -88,21 +65,6 @@ class ProcessResponseView(View):
             redirect_url = settings.WS_PAY_ERROR_URL
 
         return form_class, request_status, redirect_url
-
-    def _update_payment_request(self, response_data, request_status):
-        wspay_request = WSPayRequest.objects.get(
-            request_uuid=response_data['ShoppingCartID'],
-        )
-        wspay_request.status = request_status.name
-        wspay_request.response = json.dumps(response_data)
-        wspay_request.save()
-
-        # Send a signal
-        pay_request_updated.send_robust(
-            WSPayRequest.__class__,
-            instance=wspay_request,
-            status=request_status
-        )
 
 
 class TestView(FormView):

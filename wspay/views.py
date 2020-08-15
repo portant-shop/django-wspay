@@ -12,6 +12,7 @@ from wspay.services import (
     process_response_data, render_wspay_form,
     verify_response
 )
+from wspay.signals import process_response_pre_redirect
 
 
 class ProcessView(FormView):
@@ -45,7 +46,12 @@ class ProcessResponseView(View):
 
         # If redirect_url setting is a callable, redirect to result of call
         if hasattr(redirect_url, '__call__'):
-            return redirect(redirect_url(wspay_request))
+            redirect_url = redirect_url(wspay_request)
+
+        process_response_pre_redirect.send_robust(
+            self.__class__,
+            wspay_request=wspay_request, http_request=request, redirect_url=redirect_url,
+        )
 
         return redirect(redirect_url)
 

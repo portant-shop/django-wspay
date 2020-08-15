@@ -7,7 +7,7 @@ from django.test.client import RequestFactory
 
 from wspay.forms import UnprocessedPaymentForm, WSPaySignedForm
 from wspay.models import WSPayRequest
-from wspay.services import process_input_data, generate_signature
+from wspay.services import generate_wspay_form_data, generate_signature
 
 from django.conf import settings
 
@@ -44,7 +44,7 @@ def test_wspay_encode():
 
     incoming_form = UnprocessedPaymentForm({'cart_id': 1, 'price': 10})
     if (incoming_form.is_valid()):
-        form_data = process_input_data(
+        form_data = generate_wspay_form_data(
             incoming_form.cleaned_data.copy(), RequestFactory().get('/')
         )
 
@@ -65,7 +65,7 @@ def test_wspay_form():
 
     incoming_form = UnprocessedPaymentForm({'user_id': 1, 'cart_id': 1, 'price': 1})
     if (incoming_form.is_valid()):
-        form_data = process_input_data(
+        form_data = generate_wspay_form_data(
             incoming_form.cleaned_data.copy(),
             RequestFactory().get('/')
         )

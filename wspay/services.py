@@ -3,9 +3,11 @@ import json
 import hashlib
 
 from django.core.exceptions import ValidationError
+from django.shortcuts import render
 from django.urls import reverse
 
 from wspay.conf import settings
+from wspay.forms import WSPaySignedForm
 from wspay.models import WSPayRequest
 from wspay.signals import pay_request_created, pay_request_updated
 
@@ -13,13 +15,35 @@ EXP = Decimal('.01')
 setcontext(BasicContext)
 
 
-def process_input_data(input_data, request, user=None):
+def render_wspay_form(form, request, additional_data=''):
+    """
+    Render the page that will submit signed data to wspay.
+
+    Convert input data into WSPay format
+    Generate wspay signature
+
+    Return an HttpResponse that will submit the form data to wspay.
+    """
+    if not form.is_valid():
+        raise ValidationError(form.errors)
+    wspay_form = WSPaySignedForm(
+        generate_wspay_form_data(form.cleaned_data.copy(), request, additional_data)
+    )
+    return render(
+        request,
+        'wspay/wspay_submit.html',
+        {'form': wspay_form, 'submit_url': settings.WS_PAY_PAYMENT_ENDPOINT}
+    )
+
+
+def generate_wspay_form_data(input_data, request, additional_data=''):
     """Process incoming data and prepare for POST to WSPay."""
     wspay_request = WSPayRequest.objects.create(
         cart_id=input_data['cart_id'],
+        additional_data=additional_data,
     )
     # Send a signal
-    pay_request_created.send_robust(WSPayRequest.__class__, instance=wspay_request)
+    pay_request_created.send_robust(WSPayRequest, instance=wspay_request)
 
     input_data['cart_id'] = str(wspay_request.request_uuid)
 
@@ -99,7 +123,7 @@ def process_response_data(response_data, request_status):
 
     # Send a signal
     pay_request_updated.send_robust(
-        WSPayRequest.__class__,
+        WSPayRequest,
         instance=wspay_request,
         status=request_status
     )

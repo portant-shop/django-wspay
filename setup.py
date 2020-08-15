@@ -46,7 +46,7 @@ setup(
         "django-appconf>=1.0.4",
         "django>=3.0",
         "pytz",
-        "responses>=0.10.16",
+        "responses>=0.10.16",  # Remove responses as requirement
         "six",
     ],
     extras_require={

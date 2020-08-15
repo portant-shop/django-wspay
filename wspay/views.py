@@ -1,14 +1,17 @@
-from django.shortcuts import render, redirect
+from django.shortcuts import redirect
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import FormView, View
 
 from wspay.conf import settings
 from wspay.forms import (
-    UnprocessedPaymentForm, WSPaySignedForm, WSPayErrorResponseForm, WSPaySuccessResponseForm,
+    UnprocessedPaymentForm, WSPayErrorResponseForm, WSPaySuccessResponseForm,
     WSPayCancelResponseForm,
 )
 from wspay.models import WSPayRequestStatus
-from wspay.services import process_input_data, process_response_data, verify_response
+from wspay.services import (
+    process_response_data, render_wspay_form,
+    verify_response
+)
 
 
 class ProcessView(FormView):
@@ -18,14 +21,7 @@ class ProcessView(FormView):
     template_name = 'wspay/error.html'
 
     def form_valid(self, form):
-        wspay_form = WSPaySignedForm(
-            process_input_data(form.cleaned_data.copy(), self.request)
-        )
-        return render(
-            self.request,
-            'wspay/wspay_submit.html',
-            {'form': wspay_form, 'submit_url': settings.WS_PAY_PAYMENT_ENDPOINT}
-        )
+        return render_wspay_form(form, self.request)
 
 
 class PaymentStatus:

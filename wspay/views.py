@@ -38,10 +38,14 @@ class ProcessResponseView(View):
         form_class, request_status, redirect_url = self._unpack_response_status(kwargs['status'])
 
         data = request.POST if request.method == 'POST' else request.GET
-        process_response_data(
+        wspay_request = process_response_data(
             verify_response(form_class, data),
             request_status
         )
+
+        # If redirect_url setting is a callable, redirect to result of call
+        if hasattr(redirect_url, '__call__'):
+            return redirect(redirect_url(wspay_request))
 
         return redirect(redirect_url)
 

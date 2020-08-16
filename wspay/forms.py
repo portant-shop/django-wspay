@@ -86,12 +86,6 @@ class WSPayErrorResponseForm(WSPaySuccessErrorResponseForm):
     ErrorMessage = forms.CharField()
     ErrorCodes = forms.CharField()
 
-    def clean(self):
-        cleaned_data = super().clean()
-
-        if cleaned_data['Success'] != 0:
-            raise ValidationError('Expecting Success to be 0.')
-
 
 class WSPayCancelResponseForm(WSPayBaseResponseForm):
     ResponseCode = forms.CharField()

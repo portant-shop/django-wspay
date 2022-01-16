@@ -33,16 +33,22 @@ class WSPayAppConf(AppConf):
     def configure_development(self, value):
         return settings.DEBUG if value is None else value
 
+    def configure_shop_id(self, value):
+        return self._configure_potentially_callable_setting(value)
+
+    def configure_secret_key(self, value):
+        return self._configure_potentially_callable_setting(value)
+
     def configure_success_url(self, value):
-        return self._configure_redirect_url(value)
+        return self._configure_potentially_callable_setting(value)
 
     def configure_error_url(self, value):
-        return self._configure_redirect_url(value)
+        return self._configure_potentially_callable_setting(value)
 
     def configure_cancel_url(self, value):
-        return self._configure_redirect_url(value)
+        return self._configure_potentially_callable_setting(value)
 
-    def _configure_redirect_url(self, value):
+    def _configure_potentially_callable_setting(self, value):
         # If redirect_url setting is a callable return it
         if hasattr(value, '__call__'):
             value

@@ -6,9 +6,9 @@ from django.core.exceptions import ValidationError
 from django.shortcuts import render
 from django.urls import reverse
 
-from wspay.conf import settings
+from wspay.conf import settings, resolve
 from wspay.forms import WSPaySignedForm
-from wspay.models import WSPayRequest
+from wspay.models import WSPayRequest, WSPayTransaction
 from wspay.signals import pay_request_created, pay_request_updated
 
 EXP = Decimal('.01')
@@ -32,7 +32,7 @@ def render_wspay_form(form, request, additional_data=''):
     return render(
         request,
         'wspay/wspay_submit.html',
-        {'form': wspay_form, 'submit_url': settings.WS_PAY_PAYMENT_ENDPOINT}
+        {'form': wspay_form, 'submit_url': resolve(settings.WS_PAY_PAYMENT_ENDPOINT)}
     )
 
 
@@ -51,14 +51,21 @@ def generate_wspay_form_data(input_data, request, additional_data=''):
     assert price > 0, 'Price must be greater than 0'
     total_for_sign, total = build_price(price)
 
-    signature = generate_signature(
-        [settings.WS_PAY_SHOP_ID, input_data['cart_id'], total_for_sign]
-    )
+    shop_id = resolve(settings.WS_PAY_SHOP_ID)
+    secret_key = resolve(settings.WS_PAY_SECRET_KEY)
+    signature = generate_signature([
+        shop_id,
+        secret_key,
+        input_data['cart_id'],
+        secret_key,
+        total_for_sign,
+        secret_key,
+    ])
 
     return_data = {
-        'ShopID': settings.WS_PAY_SHOP_ID,
+        'ShopID': shop_id,
         'ShoppingCartID': input_data['cart_id'],
-        'Version': settings.WS_PAY_VERSION,
+        'Version': resolve(settings.WS_PAY_VERSION),
         'TotalAmount': total,
         'Signature': signature,
         'ReturnURL': request.build_absolute_uri(
@@ -97,11 +104,43 @@ def verify_response(form_class, data):
     form = form_class(data=data)
     if form.is_valid():
         signature = form.cleaned_data['Signature']
+        shop_id = resolve(settings.WS_PAY_SHOP_ID)
+        secret_key = resolve(settings.WS_PAY_SECRET_KEY)
         param_list = [
-            settings.WS_PAY_SHOP_ID,
+            shop_id,
+            secret_key,
             data['ShoppingCartID'],
+            secret_key,
             data['Success'],
-            data['ApprovalCode']
+            secret_key,
+            data['ApprovalCode'],
+            secret_key,
+        ]
+        expected_signature = generate_signature(param_list)
+        if signature != expected_signature:
+            raise ValidationError('Bad signature')
+
+        return form.cleaned_data
+
+    raise ValidationError('Form is not valid')
+
+
+def verify_transaction_report(form_class, data):
+    """Verify validity and authenticity of wspay transaction report."""
+    form = form_class(data=data)
+    if form.is_valid():
+        signature = form.cleaned_data['Signature']
+        shop_id = resolve(settings.WS_PAY_SHOP_ID)
+        secret_key = resolve(settings.WS_PAY_SECRET_KEY)
+        param_list = [
+            shop_id,
+            secret_key,
+            form.cleaned_data['ActionSuccess'],
+            form.cleaned_data['ApprovalCode'],
+            secret_key,
+            shop_id,
+            form.cleaned_data['ApprovalCode'],
+            form.cleaned_data['WsPayOrderId'],
         ]
         expected_signature = generate_signature(param_list)
         if signature != expected_signature:
@@ -131,12 +170,28 @@ def process_response_data(response_data, request_status):
     return wspay_request
 
 
+def process_transaction_report(response_data):
+    """Create a transaction and append to relevant wspay request."""
+    request_uuid = response_data['ShoppingCartID']
+    wspay_request = WSPayRequest.objects.get(
+        request_uuid=request_uuid,
+    )
+    # TODO: Update status
+    transaction = WSPayTransaction.objects.create(
+        payload=json.dumps(response_data)
+    )
+    wspay_request.transactions.add(transaction)
+
+    # TODO: Send a signal
+
+    return transaction
+
+
 def generate_signature(param_list):
     """Compute the signature."""
     result = []
     for x in param_list:
-        result.append(x)
-        result.append(settings.WS_PAY_SECRET_KEY)
+        result.append(str(x))
     return compute_hash(''.join(result))
 
 
@@ -169,3 +224,11 @@ def build_price(price):
         build(next())
 
     return str(int(rounded * 100)), ''.join(reversed(result))
+
+
+def get_endpoint():
+    """Return production or dev endpoint based on DEVELOPMENT setting."""
+    development = resolve(settings.WS_PAY_DEVELOPMENT)
+    if development:
+        return 'https://formtest.wspay.biz/authorization.aspx'
+    return 'https://form.wspay.biz/authorization.aspx'

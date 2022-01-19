@@ -42,5 +42,11 @@ TEMPLATES = [{
 }]
 SECRET_KEY = "ws-pay-secret-key"
 
-WS_PAY_SHOP_ID = "ljekarnaplus"
-WS_PAY_SECRET_KEY = "123456"
+
+def _shop_id():
+    return 'MojShop'
+
+
+WS_PAY_SHOP_ID = _shop_id
+WS_PAY_SECRET_KEY = 'wspay.tests.utils.secret_key'
+WS_PAY_DEVELOPMENT = True

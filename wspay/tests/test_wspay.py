@@ -3,13 +3,14 @@ import responses
 import requests
 
 from django.urls import reverse
-from django.test.client import RequestFactory
+from django.test.client import RequestFactory, Client
+from wspay.conf import settings, resolve
 
 from wspay.forms import UnprocessedPaymentForm, WSPaySignedForm
 from wspay.models import WSPayRequest
-from wspay.services import generate_wspay_form_data, generate_signature
+from wspay.services import generate_wspay_form_data, generate_signature, get_endpoint
 
-from django.conf import settings
+from wspay.tests.utils import TRANSACTION_REPORT
 
 
 def test_incoming_data_form():
@@ -23,12 +24,14 @@ def test_incoming_data_form():
 @pytest.mark.django_db
 def test_wspay_encode():
     """Test the processing function which prepares the data for WSPay."""
-    assert settings.WS_PAY_SHOP_ID == 'ljekarnaplus'
-    assert settings.WS_PAY_SECRET_KEY == '123456'
+    shop_id = resolve(settings.WS_PAY_SHOP_ID)
+    secret_key = resolve(settings.WS_PAY_SECRET_KEY)
+    assert shop_id == 'MojShop'
+    assert secret_key == 'MojSecret'
 
     return_data = {
-        'ShopID': settings.WS_PAY_SHOP_ID,
-        'Version': settings.WS_PAY_VERSION,
+        'ShopID': shop_id,
+        'Version': resolve(settings.WS_PAY_VERSION),
         'TotalAmount': '10,00',
         'ReturnURL': (
             'http://testserver' + reverse('wspay:process-response', kwargs={'status': 'success'})
@@ -50,9 +53,14 @@ def test_wspay_encode():
 
     req = WSPayRequest.objects.get()
     return_data['ShoppingCartID'] = str(req.request_uuid)
-    return_data['Signature'] = generate_signature(
-        [settings.WS_PAY_SHOP_ID, str(req.request_uuid), '1000']
-    )
+    return_data['Signature'] = generate_signature([
+        shop_id,
+        secret_key,
+        str(req.request_uuid),
+        secret_key,
+        '1000',
+        secret_key,
+    ])
 
     assert return_data == form_data
 
@@ -77,3 +85,34 @@ def test_wspay_form():
     responses.add(responses.POST, 'https://formtest.wspay.biz/authorization.aspx', status=200)
     response = requests.post('https://formtest.wspay.biz/authorization.aspx', form)
     assert response.status_code == 200
+
+
+@pytest.mark.django_db
+def test_transaction_update(settings):
+    """Test wspay transaction update callback."""
+    request = WSPayRequest.objects.create(cart_id=1)
+    settings.WS_PAY_SHOP_ID = 'MYSHOP'
+    settings.WS_PAY_SECRET_KEY = '3DfEO2B5Jjm4VC1Q3vEh'
+    TRANSACTION_REPORT['ShoppingCartID'] = str(request.request_uuid)
+    r = Client().post(
+        reverse('wspay:transaction-report'),
+        TRANSACTION_REPORT,
+    )
+    assert r.status_code == 200
+    assert r.content == b'OK'
+    assert request.transactions.count() == 1
+
+
+def test_conf_resolver():
+    """Test conf resolver when settings are callables or dotted path to a callable."""
+    assert resolve(settings.WS_PAY_SHOP_ID) == 'MojShop'
+    assert resolve(settings.WS_PAY_SECRET_KEY) == 'MojSecret'
+
+
+def test_get_endpoint(settings):
+    """Test get_endpoint setting."""
+    assert settings.WS_PAY_DEVELOPMENT is True
+    assert get_endpoint() == 'https://formtest.wspay.biz/authorization.aspx'
+
+    settings.WS_PAY_DEVELOPMENT = False
+    assert get_endpoint() == 'https://form.wspay.biz/authorization.aspx'

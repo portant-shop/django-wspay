@@ -16,6 +16,12 @@ class WSPayRequestStatus(Enum):
         return [(x.name, x.value) for x in cls]
 
 
+class WSPayTransaction(models.Model):
+    payload = models.TextField()
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+
 class WSPayRequest(models.Model):
     cart_id = models.PositiveIntegerField()
     status = models.CharField(
@@ -29,5 +35,6 @@ class WSPayRequest(models.Model):
         blank=True,
         help_text=_('Use this to store any data you want to preserve when making a request')
     )
+    transactions = models.ManyToManyField(to=WSPayTransaction)
     created = models.DateTimeField(auto_now_add=True)
     updated = models.DateTimeField(auto_now=True)

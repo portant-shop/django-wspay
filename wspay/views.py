@@ -61,7 +61,7 @@ class ProcessResponseView(View):
         elif status == PaymentStatus.CANCEL:
             form_class = WSPayCancelResponseForm
             request_status = WSPayRequestStatus.CANCELLED
-            redirect_url = resolve(settings.WS_PAY_CANCEL_UR)
+            redirect_url = resolve(settings.WS_PAY_CANCEL_URL)
         else:
             form_class = WSPayErrorResponseForm
             request_status = WSPayRequestStatus.FAILED

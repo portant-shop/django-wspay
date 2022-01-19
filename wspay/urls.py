@@ -1,7 +1,7 @@
 from django.conf import settings
 from django.urls import path, re_path
 
-from wspay.views import ProcessView, ProcessResponseView, TestView
+from wspay.views import ProcessView, ProcessResponseView, TestView, TransactionReportView
 
 app_name = 'wspay'
 
@@ -15,6 +15,11 @@ urlpatterns = [
         r'^response/(?P<status>success|error|cancel)/$',
         ProcessResponseView.as_view(),
         name='process-response'
+    ),
+    path(
+        'transaction-report/',
+        TransactionReportView.as_view(),
+        name='transaction-report'
     ),
 ]
 

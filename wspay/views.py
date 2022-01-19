@@ -1,16 +1,17 @@
 from django.shortcuts import redirect
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import FormView, View
+from django.http.response import HttpResponse
 
-from wspay.conf import settings
+from wspay.conf import settings, resolve
 from wspay.forms import (
     UnprocessedPaymentForm, WSPayErrorResponseForm, WSPaySuccessResponseForm,
-    WSPayCancelResponseForm,
+    WSPayCancelResponseForm, WSPayTransactionReportForm,
 )
 from wspay.models import WSPayRequestStatus
 from wspay.services import (
-    process_response_data, render_wspay_form,
-    verify_response
+    process_response_data, process_transaction_report, render_wspay_form,
+    verify_response, verify_transaction_report
 )
 from wspay.signals import process_response_pre_redirect
 
@@ -44,10 +45,6 @@ class ProcessResponseView(View):
             request_status
         )
 
-        # If redirect_url setting is a callable, redirect to result of call
-        if hasattr(redirect_url, '__call__'):
-            redirect_url = redirect_url(wspay_request)
-
         process_response_pre_redirect.send_robust(
             self.__class__,
             wspay_request=wspay_request, http_request=request, redirect_url=redirect_url,
@@ -60,17 +57,31 @@ class ProcessResponseView(View):
         if status == PaymentStatus.SUCCESS:
             form_class = WSPaySuccessResponseForm
             request_status = WSPayRequestStatus.COMPLETED
-            redirect_url = settings.WS_PAY_SUCCESS_URL
+            redirect_url = resolve(settings.WS_PAY_SUCCESS_URL)
         elif status == PaymentStatus.CANCEL:
             form_class = WSPayCancelResponseForm
             request_status = WSPayRequestStatus.CANCELLED
-            redirect_url = settings.WS_PAY_CANCEL_URL
+            redirect_url = resolve(settings.WS_PAY_CANCEL_URL)
         else:
             form_class = WSPayErrorResponseForm
             request_status = WSPayRequestStatus.FAILED
-            redirect_url = settings.WS_PAY_ERROR_URL
+            redirect_url = resolve(settings.WS_PAY_ERROR_URL)
 
         return form_class, request_status, redirect_url
+
+
+class TransactionReportView(View):
+    """Transaction response - CallbackURL."""
+
+    @csrf_exempt
+    def dispatch(self, request, *args, **kwargs):
+        print('dispatch', request.method)
+        data = request.POST if request.method == 'POST' else request.GET
+        print(data)
+        process_transaction_report(
+            verify_transaction_report(WSPayTransactionReportForm, data)
+        )
+        return HttpResponse('OK')
 
 
 class TestView(FormView):

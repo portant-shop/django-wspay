@@ -2,8 +2,8 @@ TRANSACTION_REPORT = {
     'WsPayOrderId': '96a5f58f-764c-4640-90ea-591280893bff',
     'UniqueTransactionNumber': 46370,
     'Signature': ''.join([
-        '719cbb3ea1edb3cde1bf839c39be2be9fc43f96d317f862007b341862e623870110c1e2b27d556394',
-        'ae76543d18a10120f6f9ea9753af4086aca036ef75010c1'
+        'b77be564829eda566d516d544b08e6ff16968ce13c5566781ae12621c685819b14ae1fea124a87',
+        'fa1e72b94127a91cd319982b065b4a4d490ff875e6dc115f93',
     ]),
     'STAN': '38967',
     'ApprovalCode': '961792',
@@ -45,8 +45,8 @@ STATUS_CHECK_RESPONSE = {
     'WsPayOrderId': '4ae43ae9-af8f-4ddd-8a21-7864f9fe81fb',
     'UniqueTransactionNumber': 380037,
     'Signature': ''.join([
-        'b511d2d573d4858dd685fe8c0e8c01a97df4a43470df97604c6d6cdaa5cb593547d98b9',
-        '3333257763de0a3d18e56bfe40d45256ba1ed892a5205bec08562aff4',
+        '7a266ceb2abad8001fa33a8dac5a270a47a716521bab40cc88e3158843fbf70d176dc832462',
+        'bf904436ed3d3060b30623a76af3d040918ab005108249dd962d0',
     ]),
     'STAN': '128729',
     'ApprovalCode': '307006',
@@ -85,7 +85,7 @@ STATUS_CHECK_RESPONSE = {
 
 def secret_key():
     """Resolve secret key setting."""
-    return 'MojSecret'
+    return '3DfEO2B5Jjm4VC1Q3vEh'
 
 
 class MockResponse:

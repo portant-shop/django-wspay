@@ -1,5 +1,6 @@
 from datetime import date
 from decimal import Decimal
+from unittest.mock import patch
 import pytest
 import responses
 import requests
@@ -9,11 +10,12 @@ from django.utils import timezone as tz
 from django.test.client import RequestFactory, Client
 from wspay.conf import settings, resolve
 
-from wspay.forms import UnprocessedPaymentForm, WSPaySignedForm
-from wspay.models import WSPayRequest
+from wspay.forms import UnprocessedPaymentForm, WSPaySignedForm, WSPayTransactionReportForm
+from wspay.models import Transaction, WSPayRequest
+from wspay import services
 from wspay.services import (
     generate_wspay_form_data, generate_signature, get_form_endpoint, get_services_endpoint,
-    status_check
+    process_transaction_report, status_check, verify_transaction_report
 )
 
 from wspay.tests.utils import STATUS_CHECK_RESPONSE, TRANSACTION_REPORT, MockResponse
@@ -33,7 +35,7 @@ def test_wspay_encode():
     shop_id = resolve(settings.WS_PAY_SHOP_ID)
     secret_key = resolve(settings.WS_PAY_SECRET_KEY)
     assert shop_id == 'MojShop'
-    assert secret_key == 'MojSecret'
+    assert secret_key == '3DfEO2B5Jjm4VC1Q3vEh'
 
     return_data = {
         'ShopID': shop_id,
@@ -97,8 +99,6 @@ def test_wspay_form():
 def test_transaction_update(settings):
     """Test wspay transaction update callback."""
     request = WSPayRequest.objects.create(cart_id=1)
-    settings.WS_PAY_SHOP_ID = 'MYSHOP'
-    settings.WS_PAY_SECRET_KEY = '3DfEO2B5Jjm4VC1Q3vEh'
     TRANSACTION_REPORT['ShoppingCartID'] = str(request.request_uuid)
     r = Client().post(
         reverse('wspay:transaction-report'),
@@ -132,7 +132,6 @@ def test_status_check():
     """Test WSPay status check method."""
     request = WSPayRequest.objects.create(cart_id=1)
 
-    from mock import patch
     STATUS_CHECK_RESPONSE.update({'ShoppingCartID': str(request.request_uuid)})
 
     response = MockResponse(status_code=200, json_data=STATUS_CHECK_RESPONSE)
@@ -162,7 +161,7 @@ def test_status_check():
 def test_conf_resolver():
     """Test conf resolver when settings are callables or dotted path to a callable."""
     assert resolve(settings.WS_PAY_SHOP_ID) == 'MojShop'
-    assert resolve(settings.WS_PAY_SECRET_KEY) == 'MojSecret'
+    assert resolve(settings.WS_PAY_SECRET_KEY) == '3DfEO2B5Jjm4VC1Q3vEh'
 
 
 def test_get_form_endpoint(settings):
@@ -181,3 +180,50 @@ def test_get_services_endpoint(settings):
 
     settings.WS_PAY_DEVELOPMENT = False
     assert get_services_endpoint() == 'https://secure.wspay.biz/api/services'
+
+
+@pytest.mark.django_db
+@pytest.mark.parametrize(['action', 'allow_attr'], [
+    ('complete', 'can_complete'),
+    ('refund', 'can_refund'),
+    ('void', 'can_void')
+])
+def test_transaction_actions(action, allow_attr):
+    """Test `complete`, `refund` and `void` function."""
+    request = WSPayRequest.objects.create(
+        cart_id=1,
+    )
+    TRANSACTION_REPORT['ShoppingCartID'] = str(request.request_uuid)
+    transaction = process_transaction_report(
+        verify_transaction_report(WSPayTransactionReportForm, TRANSACTION_REPORT)
+    )
+    assert Transaction.objects.count() == 1
+
+    action_func = getattr(services, action)
+
+    if action != 'void':
+        with pytest.raises(AssertionError):
+            action_func(transaction, Decimal(100))
+
+    setattr(transaction, allow_attr, False)
+    transaction.save()
+    with pytest.raises(AssertionError):
+        action_func(transaction)
+
+    setattr(transaction, allow_attr, True)
+    transaction.save()
+    json_data = {
+        'WsPayOrderId': "c1c7ad40-6293-417e-9dff-8390822efcb6",
+        "ShopID": "MYSHOP",
+        "ApprovalCode": "559974",
+        "STAN": "38400",
+        "ErrorMessage": "",
+        "ActionSuccess": "1",
+        "Signature": ''.join([
+            '9f3c7e03bfe3937a1dd82fec8de8719c12ce01679fcf0f96070436b094f7192dab0ff1c8bef',
+            '64d65f167049c9df4ca46a12efa1de2a52cba83b20c9cda88ff2f',
+        ])
+    }
+    response = MockResponse(status_code=200, json_data=json_data)
+    with patch.object(requests, 'post', return_value=response):
+        action_func(transaction)

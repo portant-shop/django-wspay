@@ -19,7 +19,8 @@ class Migration(migrations.Migration):
         migrations.CreateModel(
             name='Transaction',
             fields=[
-                ('id', models.AutoField(auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
+                ('id', models.AutoField(
+                    auto_created=True, primary_key=True, serialize=False, verbose_name='ID')),
                 ('request_uuid', models.UUIDField(default=uuid.uuid4, unique=True)),
                 ('stan', models.CharField(max_length=10)),
                 ('amount', models.DecimalField(decimal_places=2, max_digits=9)),
@@ -42,6 +43,11 @@ class Migration(migrations.Migration):
         migrations.AddField(
             model_name='wspayrequest',
             name='transaction',
-            field=models.OneToOneField(blank=True, null=True, on_delete=django.db.models.deletion.PROTECT, to='wspay.transaction'),
+            field=models.OneToOneField(
+                blank=True,
+                null=True,
+                on_delete=django.db.models.deletion.PROTECT,
+                to='wspay.transaction'
+            ),
         ),
     ]

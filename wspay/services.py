@@ -1,8 +1,10 @@
 import calendar
 from decimal import setcontext, Decimal, BasicContext
 from datetime import datetime, date
+from enum import Enum
 import json
 import hashlib
+from typing import Tuple
 import requests
 import pytz
 
@@ -195,7 +197,7 @@ def process_transaction_report(response_data):
         request_uuid=request_uuid,
         defaults={
             'stan': response_data['STAN'],
-            'amount': response_data['Amount'],
+            'amount': Decimal(response_data['Amount']),
             'approval_code': response_data['ApprovalCode'],
             'ws_pay_order_id': response_data['WsPayOrderId'],
             'transaction_datetime': transaction_datetime,
@@ -253,6 +255,103 @@ def status_check(request_uuid):
     return process_transaction_report(
         verify_transaction_report(WSPayTransactionReportForm, r.json())
     )
+
+
+class TransactionAction(Enum):
+    Complete = 'completion'
+    Refund = 'refund'
+    Void = 'void'
+
+
+def complete(transaction: Transaction, amount: Decimal = None) -> Tuple(bool, str):
+    """Complete preauthorized transaction."""
+    assert transaction.can_complete
+    assert amount is None or amount <= transaction.amount
+    return _transaction_action(
+        transaction,
+        int((amount or transaction.amount) * 100),
+        TransactionAction.Complete
+    )
+
+
+def refund(transaction: Transaction, amount: Decimal = None) -> Tuple(bool, str):
+    """Refund refundable transaction."""
+    assert transaction.can_refund
+    assert amount is None or amount <= transaction.amount
+    return _transaction_action(
+        transaction,
+        int((amount or transaction.amount) * 100),
+        TransactionAction.Refund
+    )
+
+
+def void(transaction: Transaction) -> Tuple(bool, str):
+    """Void voidable transaction."""
+    assert transaction.can_void
+    return _transaction_action(
+        transaction,
+        int(transaction.amount * 100),
+        TransactionAction.Void
+    )
+
+
+def _transaction_action(
+    transaction: Transaction, amount: int, action: TransactionAction
+) -> Tuple(bool, str):
+    version = '2.0'
+    shop_id = resolve(settings.WS_PAY_SHOP_ID)
+    secret_key = resolve(settings.WS_PAY_SECRET_KEY)
+
+    signature = generate_signature([
+        shop_id,
+        transaction.ws_pay_order_id,
+        secret_key,
+        transaction.stan,
+        secret_key,
+        transaction.approval_code,
+        secret_key,
+        str(amount),
+        secret_key,
+        transaction.ws_pay_order_id
+    ])
+
+    data = {
+        'Version': version,
+        'WsPayOrderId': transaction.ws_pay_order_id,
+        'ShopID': shop_id,
+        'ApprovalCode': transaction.approval_code,
+        'STAN': transaction.stan,
+        'Amount': amount,
+        'Signature': signature
+    }
+    r = requests.post(
+        f'{get_services_endpoint()}/{action.value}',
+        data=data
+    )
+    response_data = r.json()
+
+    expected_signature = generate_signature([
+        shop_id,
+        secret_key,
+        response_data['STAN'],
+        response_data['ActionSuccess'],
+        secret_key,
+        response_data['ApprovalCode'],
+        response_data['WsPayOrderId'],
+    ])
+
+    if response_data['Signature'] != expected_signature:
+        raise ValidationError('Bad signature')
+
+    # Per WSPay docs update approval_code in case it was changed
+    new_approval_code = response_data['ApprovalCode']
+    if transaction.approval_code != new_approval_code:
+        transaction.approval_code = new_approval_code
+        transaction.save()
+
+    success = bool(int(response_data['ActionSuccess']))
+    error_message = response_data.get('ErrorMessage', '')
+    return success, error_message
 
 
 def generate_signature(param_list):

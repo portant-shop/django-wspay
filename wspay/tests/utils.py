@@ -41,7 +41,57 @@ TRANSACTION_REPORT = {
     'ExpirationDate': '2006'
 }
 
+STATUS_CHECK_RESPONSE = {
+    'WsPayOrderId': '4ae43ae9-af8f-4ddd-8a21-7864f9fe81fb',
+    'UniqueTransactionNumber': 380037,
+    'Signature': ''.join([
+        'b511d2d573d4858dd685fe8c0e8c01a97df4a43470df97604c6d6cdaa5cb593547d98b9',
+        '3333257763de0a3d18e56bfe40d45256ba1ed892a5205bec08562aff4',
+    ]),
+    'STAN': '128729',
+    'ApprovalCode': '307006',
+    'ShopID': 'LJEKPLUS',
+    'ShoppingCartID': '5f9c3535-0c25-4f6b-a86a-819ca1b27eec',
+    'Amount': 80.55,
+    'CurrencyCode': 191,
+    'ActionSuccess': '1',
+    'Success': '1',
+    'Authorized': '1',
+    'Completed': '0',
+    'Voided': '0',
+    'Refunded': '0',
+    'PaymentPlan': '0000',
+    'Partner': 'Pbz',
+    'OnSite': '1',
+    'CreditCardName': 'VISA',
+    'CreditCardNumber': '478561******0189',
+    'ECI': '',
+    'CustomerFirstName': 'Vedran',
+    'CustomerLastName': 'Vojvoda',
+    'CustomerAddress': 'Testna ulica 1',
+    'CustomerCity': 'Zagreb',
+    'CustomerCountry': 'HR',
+    'CustomerPhone': '55512345',
+    'CustomerZIP': '10000',
+    'CustomerEmail': 'vedran@pinkdroids.com',
+    'TransactionDateTime': '20220119211635',
+    'IsLessThen30DaysFromTransaction': True,
+    'CanBeCompleted': True,
+    'CanBeVoided': True,
+    'CanBeRefunded': False,
+    'ExpirationDate': '2212',
+}
+
 
 def secret_key():
     """Resolve secret key setting."""
     return 'MojSecret'
+
+
+class MockResponse:
+    def __init__(self, status_code, json_data):
+        self.json_data = json_data
+        self.status_code = status_code
+
+    def json(self):
+        return self.json_data

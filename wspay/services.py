@@ -1,13 +1,14 @@
 from decimal import setcontext, Decimal, BasicContext
 import json
 import hashlib
+import requests
 
 from django.core.exceptions import ValidationError
 from django.shortcuts import render
 from django.urls import reverse
 
 from wspay.conf import settings, resolve
-from wspay.forms import WSPaySignedForm
+from wspay.forms import WSPaySignedForm, WSPayTransactionReportForm
 from wspay.models import WSPayRequest, WSPayTransaction
 from wspay.signals import pay_request_created, pay_request_updated
 
@@ -187,6 +188,37 @@ def process_transaction_report(response_data):
     return transaction
 
 
+def status_check(request_uuid):
+    """Check status of a transaction."""
+    version = '2.0'
+    shop_id = resolve(settings.WS_PAY_SHOP_ID)
+    secret_key = resolve(settings.WS_PAY_SECRET_KEY)
+    shopping_cart_id = str(request_uuid)
+    signature = generate_signature([
+        shop_id,
+        secret_key,
+        shopping_cart_id,
+        secret_key,
+        shop_id,
+        shopping_cart_id
+    ])
+
+    data = {
+        'Version': version,
+        'ShopId': shop_id,
+        'ShoppingCartId': shopping_cart_id,
+        'Signature': signature
+    }
+
+    r = requests.post(
+        f'{get_services_endpoint()}/statusCheck',
+        data=data
+    )
+    return process_transaction_report(
+        verify_transaction_report(WSPayTransactionReportForm, r.json())
+    )
+
+
 def generate_signature(param_list):
     """Compute the signature."""
     result = []
@@ -226,9 +258,17 @@ def build_price(price):
     return str(int(rounded * 100)), ''.join(reversed(result))
 
 
-def get_endpoint():
+def get_form_endpoint():
     """Return production or dev endpoint based on DEVELOPMENT setting."""
     development = resolve(settings.WS_PAY_DEVELOPMENT)
     if development:
         return 'https://formtest.wspay.biz/authorization.aspx'
     return 'https://form.wspay.biz/authorization.aspx'
+
+
+def get_services_endpoint():
+    """Return production or dev services endpoint based on DEVELOPMENT setting."""
+    development = resolve(settings.WS_PAY_DEVELOPMENT)
+    if development:
+        return 'https://test.wspay.biz/api/services'
+    return 'https://secure.wspay.biz/api/services'

@@ -8,9 +8,12 @@ from wspay.conf import settings, resolve
 
 from wspay.forms import UnprocessedPaymentForm, WSPaySignedForm
 from wspay.models import WSPayRequest
-from wspay.services import generate_wspay_form_data, generate_signature, get_endpoint
+from wspay.services import (
+    generate_wspay_form_data, generate_signature, get_form_endpoint, get_services_endpoint,
+    status_check
+)
 
-from wspay.tests.utils import TRANSACTION_REPORT
+from wspay.tests.utils import STATUS_CHECK_RESPONSE, TRANSACTION_REPORT, MockResponse
 
 
 def test_incoming_data_form():
@@ -103,16 +106,39 @@ def test_transaction_update(settings):
     assert request.transactions.count() == 1
 
 
+@pytest.mark.django_db
+def test_status_check():
+    """Test WSPay status check method."""
+    request = WSPayRequest.objects.create(cart_id=1)
+
+    from mock import patch
+    STATUS_CHECK_RESPONSE.update({'ShoppingCartID': str(request.request_uuid)})
+
+    response = MockResponse(status_code=200, json_data=STATUS_CHECK_RESPONSE)
+    with patch.object(requests, 'post', return_value=response):
+        status_check(request.request_uuid)
+    assert request.transactions.count() == 1
+
+
 def test_conf_resolver():
     """Test conf resolver when settings are callables or dotted path to a callable."""
     assert resolve(settings.WS_PAY_SHOP_ID) == 'MojShop'
     assert resolve(settings.WS_PAY_SECRET_KEY) == 'MojSecret'
 
 
-def test_get_endpoint(settings):
-    """Test get_endpoint setting."""
+def test_get_form_endpoint(settings):
+    """Test get_form_endpoint function."""
     assert settings.WS_PAY_DEVELOPMENT is True
-    assert get_endpoint() == 'https://formtest.wspay.biz/authorization.aspx'
+    assert get_form_endpoint() == 'https://formtest.wspay.biz/authorization.aspx'
 
     settings.WS_PAY_DEVELOPMENT = False
-    assert get_endpoint() == 'https://form.wspay.biz/authorization.aspx'
+    assert get_form_endpoint() == 'https://form.wspay.biz/authorization.aspx'
+
+
+def test_get_services_endpoint(settings):
+    """Test get_services_endpoint setting."""
+    assert settings.WS_PAY_DEVELOPMENT is True
+    assert get_services_endpoint() == 'https://test.wspay.biz/api/services'
+
+    settings.WS_PAY_DEVELOPMENT = False
+    assert get_services_endpoint() == 'https://secure.wspay.biz/api/services'

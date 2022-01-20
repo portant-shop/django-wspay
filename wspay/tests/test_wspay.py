@@ -1,8 +1,11 @@
+from datetime import date
+from decimal import Decimal
 import pytest
 import responses
 import requests
 
 from django.urls import reverse
+from django.utils import timezone as tz
 from django.test.client import RequestFactory, Client
 from wspay.conf import settings, resolve
 
@@ -103,7 +106,25 @@ def test_transaction_update(settings):
     )
     assert r.status_code == 200
     assert r.content == b'OK'
-    assert request.transactions.count() == 1
+
+    request.refresh_from_db()
+    assert request.transaction_id is not None
+
+    tx = request.transaction
+    assert tx.transaction_datetime == tz.datetime(2020, 4, 23, 8, 24, 57, tzinfo=tz.utc)
+    assert tx.approval_code == '961792'
+    assert tx.ws_pay_order_id == '96a5f58f-764c-4640-90ea-591280893bff'
+    assert tx.stan == '38967'
+    assert tx.amount == Decimal('78')
+    assert tx.history.count() == 1
+    assert tx.authorized is True
+    assert tx.completed is False
+    assert tx.refunded is False
+    assert tx.voided is False
+    assert tx.can_complete is True
+    assert tx.can_void is True
+    assert tx.can_refund is False
+    assert tx.expiration_date == date(2020, 6, 30)
 
 
 @pytest.mark.django_db
@@ -117,7 +138,25 @@ def test_status_check():
     response = MockResponse(status_code=200, json_data=STATUS_CHECK_RESPONSE)
     with patch.object(requests, 'post', return_value=response):
         status_check(request.request_uuid)
-    assert request.transactions.count() == 1
+
+    request.refresh_from_db()
+    assert request.transaction_id is not None
+
+    tx = request.transaction
+    assert tx.transaction_datetime == tz.datetime(2022, 1, 19, 20, 16, 35, tzinfo=tz.utc)
+    assert tx.approval_code == '307006'
+    assert tx.ws_pay_order_id == '4ae43ae9-af8f-4ddd-8a21-7864f9fe81fb'
+    assert tx.stan == '128729'
+    assert tx.amount == Decimal('80.55')
+    assert tx.history.count() == 1
+    assert tx.authorized is True
+    assert tx.completed is False
+    assert tx.refunded is False
+    assert tx.voided is False
+    assert tx.can_complete is True
+    assert tx.can_void is True
+    assert tx.can_refund is False
+    assert tx.expiration_date == date(2022, 12, 31)
 
 
 def test_conf_resolver():

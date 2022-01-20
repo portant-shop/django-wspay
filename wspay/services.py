@@ -1,7 +1,10 @@
+import calendar
 from decimal import setcontext, Decimal, BasicContext
+from datetime import datetime, date
 import json
 import hashlib
 import requests
+import pytz
 
 from django.core.exceptions import ValidationError
 from django.shortcuts import render
@@ -9,7 +12,7 @@ from django.urls import reverse
 
 from wspay.conf import settings, resolve
 from wspay.forms import WSPaySignedForm, WSPayTransactionReportForm
-from wspay.models import WSPayRequest, WSPayTransaction
+from wspay.models import Transaction, WSPayRequest, TransactionHistory
 from wspay.signals import pay_request_created, pay_request_updated
 
 EXP = Decimal('.01')
@@ -177,11 +180,44 @@ def process_transaction_report(response_data):
     wspay_request = WSPayRequest.objects.get(
         request_uuid=request_uuid,
     )
+
+    transaction_datetime = pytz.timezone(
+        'Europe/Zagreb'
+    ).localize(
+        datetime.strptime(response_data['TransactionDateTime'], '%Y%m%d%H%M%S')
+    )
+
+    expires = datetime.strptime(response_data['ExpirationDate'], '%y%m').date()
+    (_, day) = calendar.monthrange(expires.year, expires.month)
+    expires = date(expires.year, expires.month, day)
+
+    transaction, created = Transaction.objects.update_or_create(
+        request_uuid=request_uuid,
+        defaults={
+            'stan': response_data['STAN'],
+            'amount': response_data['Amount'],
+            'approval_code': response_data['ApprovalCode'],
+            'ws_pay_order_id': response_data['WsPayOrderId'],
+            'transaction_datetime': transaction_datetime,
+            'authorized': bool(response_data['Authorized']),
+            'completed': bool(response_data['Completed']),
+            'voided': bool(response_data['Voided']),
+            'refunded': bool(response_data['Refunded']),
+            'can_complete': bool(response_data['CanBeCompleted']),
+            'can_void': bool(response_data['CanBeVoided']),
+            'can_refund': bool(response_data['CanBeRefunded']),
+            'expiration_date': expires
+        }
+    )
+    if created:
+        wspay_request.transaction = transaction
+        wspay_request.save()
+
     # TODO: Update status
-    transaction = WSPayTransaction.objects.create(
+    transaction_history = TransactionHistory.objects.create(
         payload=json.dumps(response_data)
     )
-    wspay_request.transactions.add(transaction)
+    transaction.history.add(transaction_history)
 
     # TODO: Send a signal
 

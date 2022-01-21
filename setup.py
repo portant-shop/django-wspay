@@ -18,6 +18,7 @@ tests_require = [
     "mock",
     "pytest",
     "pytest-django",
+    "responses"
 ]
 
 setup(
@@ -27,7 +28,7 @@ setup(
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
     long_description_content_type='text/x-rst',
-    version="0.2.2",
+    version="0.2.3",
     license="MIT",
     url=URL,
     packages=find_packages(),
@@ -43,10 +44,8 @@ setup(
     ],
     include_package_data=True,
     install_requires=[
-        "django-appconf>=1.0.4",
         "django>=3.0",
         "pytz",
-        "responses>=0.10.16",
     ],
     extras_require={
         "testing": tests_require,

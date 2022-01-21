@@ -14,7 +14,7 @@ from django.urls import reverse
 
 from wspay.conf import settings, resolve
 from wspay.forms import WSPaySignedForm, WSPayTransactionReportForm
-from wspay.models import Transaction, WSPayRequest, TransactionHistory
+from wspay.models import Transaction, WSPayRequest, TransactionHistory, WSPayRequestStatus
 from wspay.signals import pay_request_created, pay_request_updated
 
 EXP = Decimal('.01')
@@ -38,7 +38,7 @@ def render_wspay_form(form, request, additional_data=''):
     return render(
         request,
         'wspay/wspay_submit.html',
-        {'form': wspay_form, 'submit_url': resolve(settings.WS_PAY_PAYMENT_ENDPOINT)}
+        {'form': wspay_form, 'submit_url': get_form_endpoint()}
     )
 
 
@@ -166,7 +166,8 @@ def process_response_data(response_data, request_status):
     wspay_request.response = json.dumps(response_data)
     wspay_request.save()
 
-    status_check(wspay_request.request_uuid)
+    if wspay_request.status == WSPayRequestStatus.COMPLETED.name:
+        status_check(wspay_request.request_uuid)
 
     # Send a signal
     pay_request_updated.send_robust(

@@ -15,7 +15,7 @@ from django.urls import reverse
 from wspay.conf import settings, resolve
 from wspay.forms import WSPaySignedForm, WSPayTransactionReportForm
 from wspay.models import Transaction, WSPayRequest, TransactionHistory, WSPayRequestStatus
-from wspay.signals import pay_request_created, pay_request_updated
+from wspay.signals import pay_request_created, pay_request_updated, transaction_updated
 
 EXP = Decimal('.01')
 setcontext(BasicContext)
@@ -196,6 +196,10 @@ def process_transaction_report(response_data):
     (_, day) = calendar.monthrange(expires.year, expires.month)
     expires = date(expires.year, expires.month, day)
 
+    try:
+        previous_transaction = Transaction.objects.get(request_uuid=request_uuid)
+    except Transaction.DoesNotExist:
+        previous_transaction = None
     transaction, created = Transaction.objects.update_or_create(
         request_uuid=request_uuid,
         defaults={
@@ -217,6 +221,12 @@ def process_transaction_report(response_data):
     if created:
         wspay_request.transaction = transaction
         wspay_request.save()
+    else:
+        transaction_updated.send_robust(
+            Transaction,
+            instance=transaction,
+            prevous_instance=previous_transaction
+        )
 
     # TODO: Update status
     transaction_history = TransactionHistory.objects.create(

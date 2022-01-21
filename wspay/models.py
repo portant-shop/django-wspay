@@ -29,9 +29,6 @@ class Transaction(models.Model):
     approval_code = models.CharField(max_length=10)
     ws_pay_order_id = models.CharField(max_length=50)
     transaction_datetime = models.DateTimeField()
-    created = models.DateTimeField(auto_now_add=True)
-    updated = models.DateTimeField(auto_now=True)
-    history = models.ManyToManyField(to=TransactionHistory)
     authorized = models.BooleanField(default=False)
     completed = models.BooleanField(default=False)
     voided = models.BooleanField(default=False)
@@ -40,6 +37,10 @@ class Transaction(models.Model):
     can_void = models.BooleanField(default=False)
     can_refund = models.BooleanField(default=False)
     expiration_date = models.DateField()
+    created = models.DateTimeField(auto_now_add=True)
+    updated = models.DateTimeField(auto_now=True)
+
+    history = models.ManyToManyField(to=TransactionHistory)
 
 
 class WSPayRequest(models.Model):

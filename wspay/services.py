@@ -166,6 +166,8 @@ def process_response_data(response_data, request_status):
     wspay_request.response = json.dumps(response_data)
     wspay_request.save()
 
+    status_check(wspay_request.request_uuid)
+
     # Send a signal
     pay_request_updated.send_robust(
         WSPayRequest,
@@ -263,7 +265,7 @@ class TransactionAction(Enum):
     Void = 'void'
 
 
-def complete(transaction: Transaction, amount: Decimal = None) -> Tuple(bool, str):
+def complete(transaction: Transaction, amount: Decimal = None) -> Tuple[bool, str]:
     """Complete preauthorized transaction."""
     assert transaction.can_complete
     assert amount is None or amount <= transaction.amount
@@ -274,7 +276,7 @@ def complete(transaction: Transaction, amount: Decimal = None) -> Tuple(bool, st
     )
 
 
-def refund(transaction: Transaction, amount: Decimal = None) -> Tuple(bool, str):
+def refund(transaction: Transaction, amount: Decimal = None) -> Tuple[bool, str]:
     """Refund refundable transaction."""
     assert transaction.can_refund
     assert amount is None or amount <= transaction.amount
@@ -285,7 +287,7 @@ def refund(transaction: Transaction, amount: Decimal = None) -> Tuple(bool, str)
     )
 
 
-def void(transaction: Transaction) -> Tuple(bool, str):
+def void(transaction: Transaction) -> Tuple[bool, str]:
     """Void voidable transaction."""
     assert transaction.can_void
     return _transaction_action(
@@ -297,7 +299,7 @@ def void(transaction: Transaction) -> Tuple(bool, str):
 
 def _transaction_action(
     transaction: Transaction, amount: int, action: TransactionAction
-) -> Tuple(bool, str):
+) -> Tuple[bool, str]:
     version = '2.0'
     shop_id = resolve(settings.WS_PAY_SHOP_ID)
     secret_key = resolve(settings.WS_PAY_SECRET_KEY)

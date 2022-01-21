@@ -1,14 +1,20 @@
+import calendar
 from decimal import setcontext, Decimal, BasicContext
+from datetime import datetime, date
+from enum import Enum
 import json
 import hashlib
+from typing import Tuple
+import requests
+import pytz
 
 from django.core.exceptions import ValidationError
 from django.shortcuts import render
 from django.urls import reverse
 
 from wspay.conf import settings, resolve
-from wspay.forms import WSPaySignedForm
-from wspay.models import WSPayRequest, WSPayTransaction
+from wspay.forms import WSPaySignedForm, WSPayTransactionReportForm
+from wspay.models import Transaction, WSPayRequest, TransactionHistory
 from wspay.signals import pay_request_created, pay_request_updated
 
 EXP = Decimal('.01')
@@ -160,6 +166,8 @@ def process_response_data(response_data, request_status):
     wspay_request.response = json.dumps(response_data)
     wspay_request.save()
 
+    status_check(wspay_request.request_uuid)
+
     # Send a signal
     pay_request_updated.send_robust(
         WSPayRequest,
@@ -176,15 +184,176 @@ def process_transaction_report(response_data):
     wspay_request = WSPayRequest.objects.get(
         request_uuid=request_uuid,
     )
+
+    transaction_datetime = pytz.timezone(
+        'Europe/Zagreb'
+    ).localize(
+        datetime.strptime(response_data['TransactionDateTime'], '%Y%m%d%H%M%S')
+    )
+
+    expires = datetime.strptime(response_data['ExpirationDate'], '%y%m').date()
+    (_, day) = calendar.monthrange(expires.year, expires.month)
+    expires = date(expires.year, expires.month, day)
+
+    transaction, created = Transaction.objects.update_or_create(
+        request_uuid=request_uuid,
+        defaults={
+            'stan': response_data['STAN'],
+            'amount': Decimal(response_data['Amount']),
+            'approval_code': response_data['ApprovalCode'],
+            'ws_pay_order_id': response_data['WsPayOrderId'],
+            'transaction_datetime': transaction_datetime,
+            'authorized': bool(response_data['Authorized']),
+            'completed': bool(response_data['Completed']),
+            'voided': bool(response_data['Voided']),
+            'refunded': bool(response_data['Refunded']),
+            'can_complete': bool(response_data['CanBeCompleted']),
+            'can_void': bool(response_data['CanBeVoided']),
+            'can_refund': bool(response_data['CanBeRefunded']),
+            'expiration_date': expires
+        }
+    )
+    if created:
+        wspay_request.transaction = transaction
+        wspay_request.save()
+
     # TODO: Update status
-    transaction = WSPayTransaction.objects.create(
+    transaction_history = TransactionHistory.objects.create(
         payload=json.dumps(response_data)
     )
-    wspay_request.transactions.add(transaction)
+    transaction.history.add(transaction_history)
 
     # TODO: Send a signal
 
     return transaction
+
+
+def status_check(request_uuid):
+    """Check status of a transaction."""
+    version = '2.0'
+    shop_id = resolve(settings.WS_PAY_SHOP_ID)
+    secret_key = resolve(settings.WS_PAY_SECRET_KEY)
+    shopping_cart_id = str(request_uuid)
+    signature = generate_signature([
+        shop_id,
+        secret_key,
+        shopping_cart_id,
+        secret_key,
+        shop_id,
+        shopping_cart_id
+    ])
+
+    data = {
+        'Version': version,
+        'ShopId': shop_id,
+        'ShoppingCartId': shopping_cart_id,
+        'Signature': signature
+    }
+
+    r = requests.post(
+        f'{get_services_endpoint()}/statusCheck',
+        data=data
+    )
+    return process_transaction_report(
+        verify_transaction_report(WSPayTransactionReportForm, r.json())
+    )
+
+
+class TransactionAction(Enum):
+    Complete = 'completion'
+    Refund = 'refund'
+    Void = 'void'
+
+
+def complete(transaction: Transaction, amount: Decimal = None) -> Tuple[bool, str]:
+    """Complete preauthorized transaction."""
+    assert transaction.can_complete
+    assert amount is None or amount <= transaction.amount
+    return _transaction_action(
+        transaction,
+        int((amount or transaction.amount) * 100),
+        TransactionAction.Complete
+    )
+
+
+def refund(transaction: Transaction, amount: Decimal = None) -> Tuple[bool, str]:
+    """Refund refundable transaction."""
+    assert transaction.can_refund
+    assert amount is None or amount <= transaction.amount
+    return _transaction_action(
+        transaction,
+        int((amount or transaction.amount) * 100),
+        TransactionAction.Refund
+    )
+
+
+def void(transaction: Transaction) -> Tuple[bool, str]:
+    """Void voidable transaction."""
+    assert transaction.can_void
+    return _transaction_action(
+        transaction,
+        int(transaction.amount * 100),
+        TransactionAction.Void
+    )
+
+
+def _transaction_action(
+    transaction: Transaction, amount: int, action: TransactionAction
+) -> Tuple[bool, str]:
+    version = '2.0'
+    shop_id = resolve(settings.WS_PAY_SHOP_ID)
+    secret_key = resolve(settings.WS_PAY_SECRET_KEY)
+
+    signature = generate_signature([
+        shop_id,
+        transaction.ws_pay_order_id,
+        secret_key,
+        transaction.stan,
+        secret_key,
+        transaction.approval_code,
+        secret_key,
+        str(amount),
+        secret_key,
+        transaction.ws_pay_order_id
+    ])
+
+    data = {
+        'Version': version,
+        'WsPayOrderId': transaction.ws_pay_order_id,
+        'ShopID': shop_id,
+        'ApprovalCode': transaction.approval_code,
+        'STAN': transaction.stan,
+        'Amount': amount,
+        'Signature': signature
+    }
+    r = requests.post(
+        f'{get_services_endpoint()}/{action.value}',
+        data=data
+    )
+    response_data = r.json()
+
+    expected_signature = generate_signature([
+        shop_id,
+        secret_key,
+        response_data['STAN'],
+        response_data['ActionSuccess'],
+        secret_key,
+        response_data['ApprovalCode'],
+        response_data['WsPayOrderId'],
+    ])
+
+    if response_data['Signature'] != expected_signature:
+        raise ValidationError('Bad signature')
+
+    # Per WSPay docs update approval_code in case it was changed
+    new_approval_code = response_data['ApprovalCode']
+    if transaction.approval_code != new_approval_code:
+        transaction.approval_code = new_approval_code
+        transaction.save()
+
+    success = bool(int(response_data['ActionSuccess']))
+    error_message = response_data.get('ErrorMessage', '')
+    return success, error_message
 
 
 def generate_signature(param_list):
@@ -226,9 +395,17 @@ def build_price(price):
     return str(int(rounded * 100)), ''.join(reversed(result))
 
 
-def get_endpoint():
+def get_form_endpoint():
     """Return production or dev endpoint based on DEVELOPMENT setting."""
     development = resolve(settings.WS_PAY_DEVELOPMENT)
     if development:
         return 'https://formtest.wspay.biz/authorization.aspx'
     return 'https://form.wspay.biz/authorization.aspx'
+
+
+def get_services_endpoint():
+    """Return production or dev services endpoint based on DEVELOPMENT setting."""
+    development = resolve(settings.WS_PAY_DEVELOPMENT)
+    if development:
+        return 'https://test.wspay.biz/api/services'
+    return 'https://secure.wspay.biz/api/services'

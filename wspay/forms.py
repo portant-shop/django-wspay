@@ -93,7 +93,10 @@ class WSPayCancelResponseForm(WSPayBaseResponseForm):
 
 class WSPayTransactionReportForm(forms.Form):
     WsPayOrderId = forms.CharField()
-    UniqueTransactionNumber = forms.CharField()
+
+    # Declared as deprecated by WSPay docs
+    UniqueTransactionNumber = forms.CharField(required=False)
+
     Signature = forms.CharField()
     STAN = forms.CharField(required=False)
     ApprovalCode = forms.CharField()
@@ -102,7 +105,10 @@ class WSPayTransactionReportForm(forms.Form):
     Amount = forms.CharField()
     CurrencyCode = forms.CharField()
     ActionSuccess = forms.IntegerField()
+
+    # Declared as deprecated by WSPay docs
     Success = forms.IntegerField(required=False)
+
     Authorized = forms.IntegerField()
     Completed = forms.IntegerField()
     Voided = forms.IntegerField()

@@ -51,3 +51,4 @@ site/
 # IDEs
 .idea/
 .vscode
+.envrc

@@ -3,10 +3,10 @@ from appconf import AppConf
 from django.conf import settings  # noqa
 
 
-def resolve(setting):
+def resolve(setting, **kwargs):
     """Resolve setting to a result of a callable or itself."""
     if hasattr(setting, '__call__'):
-        return setting()
+        return setting(**kwargs)
     return setting
 
 

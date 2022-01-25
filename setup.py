@@ -46,6 +46,7 @@ setup(
     install_requires=[
         "django>=3.0",
         "pytz",
+        "requests"
     ],
     extras_require={
         "testing": tests_require,

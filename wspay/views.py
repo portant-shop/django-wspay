@@ -37,13 +37,22 @@ class ProcessResponseView(View):
 
     @csrf_exempt
     def dispatch(self, request, *args, **kwargs):
-        form_class, request_status, redirect_url = self._unpack_response_status(kwargs['status'])
+        form_class, request_status, redirect_setting = self._unpack_response_status(
+            kwargs['status']
+        )
 
         data = request.POST if request.method == 'POST' else request.GET
         wspay_request = process_response_data(
             verify_response(form_class, data),
             request_status
         )
+
+        kwargs = {
+            'cart_id': wspay_request.cart_id,
+            'request_uuid': wspay_request.request_uuid,
+        }
+        redirect_url = resolve(
+            redirect_setting, **kwargs)
 
         process_response_pre_redirect.send_robust(
             self.__class__,
@@ -57,17 +66,17 @@ class ProcessResponseView(View):
         if status == PaymentStatus.SUCCESS:
             form_class = WSPaySuccessResponseForm
             request_status = WSPayRequestStatus.COMPLETED
-            redirect_url = resolve(settings.WS_PAY_SUCCESS_URL)
+            redirect_setting = settings.WS_PAY_SUCCESS_URL
         elif status == PaymentStatus.CANCEL:
             form_class = WSPayCancelResponseForm
             request_status = WSPayRequestStatus.CANCELLED
-            redirect_url = resolve(settings.WS_PAY_CANCEL_URL)
+            redirect_setting = settings.WS_PAY_CANCEL_URL
         else:
             form_class = WSPayErrorResponseForm
             request_status = WSPayRequestStatus.FAILED
-            redirect_url = resolve(settings.WS_PAY_ERROR_URL)
+            redirect_setting = settings.WS_PAY_ERROR_URL
 
-        return form_class, request_status, redirect_url
+        return form_class, request_status, redirect_setting
 
 
 class TransactionReportView(View):
@@ -77,7 +86,6 @@ class TransactionReportView(View):
     def dispatch(self, request, *args, **kwargs):
         print('dispatch', request.method)
         data = request.POST if request.method == 'POST' else request.GET
-        print(data)
         process_transaction_report(
             verify_transaction_report(WSPayTransactionReportForm, data)
         )

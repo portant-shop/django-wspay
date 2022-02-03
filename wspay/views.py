@@ -84,7 +84,6 @@ class TransactionReportView(View):
 
     @csrf_exempt
     def dispatch(self, request, *args, **kwargs):
-        print('dispatch', request.method)
         data = request.POST if request.method == 'POST' else request.GET
         process_transaction_report(
             verify_transaction_report(WSPayTransactionReportForm, data)

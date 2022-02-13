@@ -5,7 +5,7 @@ NAME = "django-wspay"
 DESCRIPTION = "a payments Django app for WSPay"
 AUTHOR = "Vedran Vojvoda"
 AUTHOR_EMAIL = "vedran@pinkdroids.com"
-URL = "https://github.com/pinkdroids/django-wspay"
+URL = "https://github.com/portant-shop/django-wspay"
 LONG_DESCRIPTION = """
 ============
 Django WSPay
@@ -28,7 +28,7 @@ setup(
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
     long_description_content_type='text/x-rst',
-    version="0.3.2",
+    version="0.3.3",
     license="MIT",
     url=URL,
     packages=find_packages(),

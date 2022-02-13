@@ -47,6 +47,7 @@ setup(
         "django>=3.0",
         "pytz",
         "requests"
+        "django-appconf"
     ],
     extras_require={
         "testing": tests_require,

@@ -154,7 +154,8 @@ def verify_transaction_report(form_class, data):
 
         return form.cleaned_data
 
-    raise ValidationError('Form is not valid')
+    errors = form.errors
+    raise ValidationError('Form is not valid', params=errors.as_data())
 
 
 def process_response_data(response_data, request_status):

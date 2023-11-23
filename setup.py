@@ -28,7 +28,7 @@ setup(
     description=DESCRIPTION,
     long_description=LONG_DESCRIPTION,
     long_description_content_type='text/x-rst',
-    version="0.3.4",
+    version="0.3.5",
     license="MIT",
     url=URL,
     packages=find_packages(),
@@ -46,7 +46,7 @@ setup(
     install_requires=[
         "django>=3.0",
         "pytz",
-        "requests"
+        "requests",
         "django-appconf"
     ],
     extras_require={

@@ -17,6 +17,11 @@ urlpatterns = [
         name='process-response'
     ),
     path(
+        'transaction-report',
+        TransactionReportView.as_view(),
+        name='transaction-report'
+    ),
+    path(
         'transaction-report/',
         TransactionReportView.as_view(),
         name='transaction-report'

@@ -222,6 +222,12 @@ def process_transaction_report(response_data):
     if created:
         wspay_request.transaction = transaction
         wspay_request.save()
+
+        pay_request_updated.send_robust(
+            WSPayRequest,
+            instance=wspay_request,
+            status=WSPayRequestStatus.COMPLETED
+        )
     else:
         transaction_updated.send_robust(
             Transaction,

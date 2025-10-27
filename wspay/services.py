@@ -232,7 +232,7 @@ def process_transaction_report(response_data):
         transaction_updated.send_robust(
             Transaction,
             instance=transaction,
-            prevous_instance=previous_transaction
+            previous_instance=previous_transaction
         )
 
     # TODO: Update status

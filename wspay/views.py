@@ -1,3 +1,4 @@
+import json
 from django.shortcuts import redirect
 from django.views.decorators.csrf import csrf_exempt
 from django.views.generic import FormView, View
@@ -84,7 +85,10 @@ class TransactionReportView(View):
 
     @csrf_exempt
     def dispatch(self, request, *args, **kwargs):
-        data = request.POST if request.method == 'POST' else request.GET
+        data = request.POST if request.method == 'POST' else request.GETž
+        if not data or len(data) == 0 and request.body:
+            body = request.body.decode('utf-8')
+            data = json.loads(body)
         process_transaction_report(
             verify_transaction_report(WSPayTransactionReportForm, data)
         )

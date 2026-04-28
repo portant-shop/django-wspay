@@ -1,4 +1,4 @@
-django>=3.0
+django>=6.0.4
 django-appconf>=1.0.5
 pytz>=2021.3
 requests>=2.27.1
